@@ -35,19 +35,6 @@
 //!   The returned page is always `text/html` on success. Invalid `item` indices
 //!   will return an error.
 //!
-//! * `/slack/troubleshoot` (`POST`): a Slack slash command endpoint suggesting
-//!   one thing to check.
-//!
-//!   For information on the protocol, see [Slack's own
-//!   documentation](https://api.slack.com/interactivity/slash-commands). This
-//!   endpoint cheats furiously, and ignores Slack's recommendations around
-//!   validating requests, as there is no sensitive information returned from or
-//!   stored by this service.
-//!
-//!   This returns a JSON message object in a Slack-compatible format, which
-//!   will print the suggestion to the channel where the `/troubleshoot` command
-//!   is invoked.
-//!
 //! # Data
 //!
 //! This module creates a data item in the configured application, consisting of
@@ -60,7 +47,7 @@
 //! links to existing items are not invalidated or changed - the `item`
 //! parameter to the `/` endpoint is a literal index into this list.
 
-use actix_web::{error, get, post, web, HttpRequest, HttpResponse, Responder};
+use actix_web::{error, get, web, HttpRequest, Responder};
 use askama::Template;
 use pulldown_cmark::{html, Options, Parser};
 use rand::seq::SliceRandom;
@@ -153,29 +140,6 @@ async fn index(
     Ok(response)
 }
 
-#[derive(Serialize)]
-struct SlackMessage<'a> {
-    response_type: &'static str,
-    text: &'a String,
-}
-
-#[post("/slack/troubleshoot")]
-async fn slack_troubleshoot(data: web::Data<Things>) -> error::Result<impl Responder> {
-    let thing = data.0.choose(&mut thread_rng());
-
-    let (_, thing) = match thing {
-        Some(thing) => thing.to_owned(),
-        None => return Err(error::ErrorNotFound("Not found")),
-    };
-
-    let response = SlackMessage {
-        response_type: "in_channel",
-        text: &thing.markdown,
-    };
-
-    Ok(HttpResponse::Ok().json(response))
-}
-
 const THINGS: &str = include_str!("things-to-check.yml");
 
 #[derive(Clone)]
@@ -228,8 +192,6 @@ pub fn make_service() -> Result<impl Fn(&mut web::ServiceConfig) + Clone, Error>
     let things = load_things(THINGS)?;
 
     Ok(move |cfg: &mut web::ServiceConfig| {
-        cfg.app_data(web::Data::new(things.clone()))
-            .service(index)
-            .service(slack_troubleshoot);
+        cfg.app_data(web::Data::new(things.clone())).service(index);
     })
 }
