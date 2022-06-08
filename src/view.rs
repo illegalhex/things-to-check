@@ -73,19 +73,9 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 enum UrlError {
     #[error("Unable to generate URL: {0}")]
-    UrlGenerationError(error::UrlGenerationError),
+    UrlGenerationError(#[from] error::UrlGenerationError),
     #[error("Unable to generate URL: {0}")]
     SerializationError(#[from] ser::Error),
-}
-
-// In actix-web-2.0.0, UrlGenerationError neither implements Error nor Fail,
-// so thiserror can't automatically generate a From implementation for us.
-// This isn't perfect, but it gets the thing shipped. This omission is fixed in
-// actix_web 3.0.0, which is in alpha as of this writing.
-impl From<error::UrlGenerationError> for UrlError {
-    fn from(err: error::UrlGenerationError) -> Self {
-        UrlError::UrlGenerationError(err)
-    }
 }
 
 impl From<UrlError> for error::Error {
