@@ -60,7 +60,7 @@
 //! links to existing items are not invalidated or changed - the `item`
 //! parameter to the `/` endpoint is a literal index into this list.
 
-use actix_web::{error, get, post, web, HttpResponse, Responder};
+use actix_web::{error, get, post, web, HttpRequest, HttpResponse, Responder};
 use maud::{html, Markup, PreEscaped, DOCTYPE};
 use pulldown_cmark::{html, Options, Parser};
 use rand::seq::SliceRandom;
@@ -98,7 +98,7 @@ trait Urls {
     fn index_url(&self, query: ItemQuery) -> Result<url::Url, UrlError>;
 }
 
-impl Urls for web::HttpRequest {
+impl Urls for HttpRequest {
     fn index_url(&self, query: ItemQuery) -> Result<url::Url, UrlError> {
         let mut url = self.url_for("index", iter::empty::<&str>())?;
 
@@ -228,7 +228,7 @@ fn index_view(req: impl Urls, idx: &usize, thing: &Thing) -> MarkupResult {
 
 #[get("/")]
 async fn index(
-    req: web::HttpRequest,
+    req: HttpRequest,
     data: web::Data<Things>,
     query: web::Query<ItemQuery>,
 ) -> error::Result<impl Responder> {

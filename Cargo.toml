@@ -5,15 +5,14 @@ repository = "https://github.com/ojacobson/things-to-check/"
 publish = false
 authors = ["Owen Jacobson <owen@grimoire.ca>"]
 homepage = "https://things-to-check.herokuapp.com/"
-edition = "2018"
+edition = "2021"
 
 [badges.travis-ci]
 project = "ojacobson/things-to-check"
 branch = "main"
 
 [dependencies]
-actix-rt = "1.0"
-actix-web = "2.0"
+actix-web = "3.3.3"
 pulldown-cmark = "0.7"
 rand = "0.7"
 serde = "1.0"
@@ -21,9 +20,12 @@ serde_urlencoded = "0.6"
 serde_yaml = "0.8"
 thiserror = "1.0"
 url = "2.1"
-maud = { version = "0.22", features = ["actix-web"] }
+maud = { version = "0.23.0", features = ["actix-web"] }
+actix-rt = "1.1.1"
 
 [dev-dependencies]
 lazy_static = "~1.4"
-proptest = "~0.10"
-proptest-derive = "~0.2"
+proptest = "1.0.0"
+proptest-derive = "0.3.0"
+
+[features]
