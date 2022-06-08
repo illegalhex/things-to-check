@@ -17,7 +17,7 @@ pub enum Error {
 
 type Result = std::result::Result<(), Error>;
 
-#[actix_rt::main]
+#[actix_web::main]
 async fn main() -> Result {
     let port = twelve::port(3000)?;
 

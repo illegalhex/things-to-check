@@ -8,7 +8,7 @@
 //!
 //! ```
 //! # use things_to_check::view;
-//! # #[actix_rt::main]
+//! # #[actix_web::main]
 //! # async fn main() -> std::result::Result<(), things_to_check::view::Error> {
 //! use actix_web::{App, HttpServer};
 //!
@@ -60,8 +60,8 @@
 //! links to existing items are not invalidated or changed - the `item`
 //! parameter to the `/` endpoint is a literal index into this list.
 
-use actix_web::{error, get, post, web, HttpResponse, Responder};
-use maud::{html, Markup, PreEscaped, DOCTYPE};
+use actix_web::{error, get, post, web, HttpRequest, HttpResponse, Responder};
+use askama::Template;
 use pulldown_cmark::{html, Options, Parser};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -73,19 +73,9 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 enum UrlError {
     #[error("Unable to generate URL: {0}")]
-    UrlGenerationError(error::UrlGenerationError),
+    UrlGenerationError(#[from] error::UrlGenerationError),
     #[error("Unable to generate URL: {0}")]
     SerializationError(#[from] ser::Error),
-}
-
-// In actix-web-2.0.0, UrlGenerationError neither implements Error nor Fail,
-// so thiserror can't automatically generate a From implementation for us.
-// This isn't perfect, but it gets the thing shipped. This omission is fixed in
-// actix_web 3.0.0, which is in alpha as of this writing.
-impl From<error::UrlGenerationError> for UrlError {
-    fn from(err: error::UrlGenerationError) -> Self {
-        UrlError::UrlGenerationError(err)
-    }
 }
 
 impl From<UrlError> for error::Error {
@@ -95,11 +85,22 @@ impl From<UrlError> for error::Error {
 }
 
 trait Urls {
-    fn index_url(&self, query: ItemQuery) -> Result<url::Url, UrlError>;
+    fn index(&self, query: &ItemQuery) -> Result<url::Url, UrlError>;
+
+    // Askama always passes parameters from templates to functions as borrows,
+    // regardless of type; receiving a reference to a usize is silly, but as a
+    // result, necessary.
+    fn suggestion(&self, idx: &usize) -> Result<url::Url, UrlError> {
+        self.index(&ItemQuery::from(*idx))
+    }
+
+    fn new_suggestion(&self) -> Result<url::Url, UrlError> {
+        self.index(&ItemQuery::default())
+    }
 }
 
-impl Urls for web::HttpRequest {
-    fn index_url(&self, query: ItemQuery) -> Result<url::Url, UrlError> {
+impl Urls for HttpRequest {
+    fn index(&self, query: &ItemQuery) -> Result<url::Url, UrlError> {
         let mut url = self.url_for("index", iter::empty::<&str>())?;
 
         let query = serde_urlencoded::to_string(query)?;
@@ -114,121 +115,23 @@ struct ItemQuery {
     item: Option<usize>,
 }
 
-impl From<&usize> for ItemQuery {
-    fn from(idx: &usize) -> Self {
-        ItemQuery { item: Some(*idx) }
+impl From<usize> for ItemQuery {
+    fn from(idx: usize) -> Self {
+        ItemQuery { item: Some(idx) }
     }
 }
 
-type MarkupResult = Result<Markup, error::Error>;
-
-fn page(head: impl FnOnce() -> MarkupResult, body: impl FnOnce() -> MarkupResult) -> MarkupResult {
-    Ok(html! {
-        (DOCTYPE)
-        html {
-            head {
-                (head()?)
-            }
-            body {
-                (body()?)
-            }
-        }
-    })
-}
-
-fn stylesheet() -> Markup {
-    html! {
-        style {
-            (PreEscaped("
-            body {
-                background: #dddde7;
-                font-color: #888;
-                font-family: Helvetica, sans-serif;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-            }
-
-            section {
-                width: 600px;
-                margin: auto;
-            }
-
-            p {
-                font-size: 24px;
-            }
-
-            a {
-                text-decoration: none;
-            }
-            "))
-        }
-    }
-}
-
-fn og_card(title: &str, description: &str) -> Markup {
-    html! {
-        meta property="og:type" content="website";
-        meta property="og:title" content=(title);
-        meta property="og:description" content=(description);
-    }
-}
-
-fn suggestion_link(
-    req: &impl Urls,
-    query: ItemQuery,
-    body: impl FnOnce() -> MarkupResult,
-) -> MarkupResult {
-    Ok(html! {
-        p {
-            a href=( req.index_url(query)? ) { (body()?) }
-        }
-    })
-}
-
-fn github_badge(repo: &str) -> Markup {
-    html! {
-        a href={ "https://github.com/" (repo) } {
-            img
-                style="position: absolute; top: 0; right: 0; border: 0;"
-                src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67"
-                alt="Fork me on GitHub"
-                data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png";
-        }
-    }
-}
-
-fn index_view(req: impl Urls, idx: &usize, thing: &Thing) -> MarkupResult {
-    page(
-        || {
-            Ok(html! {
-                title { (thing.markdown) }
-                (stylesheet())
-                (og_card("Troubleshooting suggestion", &thing.markdown))
-            })
-        },
-        || {
-            Ok(html! {
-                section {
-                    (PreEscaped(&thing.html))
-                    (suggestion_link(&req, ItemQuery::default(), || Ok(html! {
-                        "That wasn't it, suggest something else."
-                    }))?)
-                    (suggestion_link(&req, ItemQuery::from(idx), || Ok(html! {
-                        "Share this troubleshooting suggestion."
-                    }))?)
-                }
-                (github_badge("ojacobson/things-to-check"))
-            })
-        },
-    )
+#[derive(Template)]
+#[template(path = "index.html")]
+struct Suggestion {
+    thing: Thing,
+    req: HttpRequest,
+    index: usize,
 }
 
 #[get("/")]
 async fn index(
-    req: web::HttpRequest,
+    req: HttpRequest,
     data: web::Data<Things>,
     query: web::Query<ItemQuery>,
 ) -> error::Result<impl Responder> {
@@ -237,12 +140,15 @@ async fn index(
         None => data.0.choose(&mut thread_rng()),
     };
 
-    let (index, thing) = match thing {
-        Some(x) => x,
-        None => return Err(error::ErrorNotFound("Not found")),
-    };
+    let thing = thing.ok_or_else(|| error::ErrorNotFound("Not found"))?;
+    let (index, thing) = thing.to_owned();
 
-    Ok(index_view(req, index, thing)?.with_header("Cache-Control", "no-store"))
+    let response = Suggestion { thing, req, index };
+    let response = response
+        .customize()
+        .insert_header(("Cache-Control", "no-store"));
+
+    Ok(response)
 }
 
 #[derive(Serialize)]
@@ -255,10 +161,7 @@ struct SlackMessage<'a> {
 async fn slack_troubleshoot(data: web::Data<Things>) -> error::Result<impl Responder> {
     let thing = data.0.choose(&mut thread_rng());
 
-    let (_, thing) = match thing {
-        Some(x) => x,
-        None => return Err(error::ErrorNotFound("Not found")),
-    };
+    let (_, thing) = thing.ok_or_else(|| error::ErrorNotFound("Not found"))?;
 
     let response = SlackMessage {
         response_type: "in_channel",
@@ -320,7 +223,7 @@ pub fn make_service() -> Result<impl Fn(&mut web::ServiceConfig) + Clone, Error>
     let things = load_things(THINGS)?;
 
     Ok(move |cfg: &mut web::ServiceConfig| {
-        cfg.data(things.clone())
+        cfg.app_data(web::Data::new(things.clone()))
             .service(index)
             .service(slack_troubleshoot);
     })

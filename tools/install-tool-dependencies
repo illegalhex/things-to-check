@@ -5,5 +5,6 @@
 # Install Rust and Cargo components used by tool scripts, which are not part of
 # Cargo.toml.
 
+rustup toolchain install nightly
 rustup component add clippy rustfmt
-cargo install cargo-udeps
+cargo +nightly install cargo-udeps
