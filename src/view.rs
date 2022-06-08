@@ -140,8 +140,10 @@ async fn index(
         None => data.0.choose(&mut thread_rng()),
     };
 
-    let thing = thing.ok_or_else(|| error::ErrorNotFound("Not found"))?;
-    let (index, thing) = thing.to_owned();
+    let (index, thing) = match thing {
+        Some(thing) => thing.to_owned(),
+        None => return Err(error::ErrorNotFound("Not found")),
+    };
 
     let response = Suggestion { thing, req, index };
     let response = response
@@ -161,7 +163,10 @@ struct SlackMessage<'a> {
 async fn slack_troubleshoot(data: web::Data<Things>) -> error::Result<impl Responder> {
     let thing = data.0.choose(&mut thread_rng());
 
-    let (_, thing) = thing.ok_or_else(|| error::ErrorNotFound("Not found"))?;
+    let (_, thing) = match thing {
+        Some(thing) => thing.to_owned(),
+        None => return Err(error::ErrorNotFound("Not found")),
+    };
 
     let response = SlackMessage {
         response_type: "in_channel",
