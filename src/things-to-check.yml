@@ -44,3 +44,4 @@
 - Have you checked which branch is deployed?
 - Have you checked if the bill got paid?
 - Have you checked that you're testing the right version?
+- Have you checked if the domain is in the the hsts preload list?
